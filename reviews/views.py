@@ -41,5 +41,5 @@ def book_details(request, pk):
 
 
 
-prueba = []
+
 

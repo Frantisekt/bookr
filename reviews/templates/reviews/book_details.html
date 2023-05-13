@@ -1,38 +1,52 @@
-{% extends 'base.html' %}
+{% extends 'reviews/base.html' %}
 {% block content %}
-{% for item in book_details %}
+<br>
+<h3>Book details</h3>
+<hr>
 <ul class="list-group">
   <li class="list-group-item">
-      <span class="text-info">Title: </span> <span>{{ item.book.title }}</span>
+      <!-- /media/book_covers/machine-learning-for-algorithmic-trading.png-->
+      {% if book.cover %}<img src="{{ book.cover.url }}">{% endif %} 
       <br>
-      <span class="text-info">Publisher: </span><span>{{ item.book.publisher.name }}</span>
+      <span class="text-info">Title: </span> <span>{{ book.title }}</span>
       <br>
-      <span class="text-info">Publication Date: </span><span>{{ item.book.publication_date }}</span>
+      <span class="text-info">Publisher: </span><span>{{ book.publisher.name }}</span>
       <br>
-      <span class="text-info">Overall rating: </span><span class="badge badge-primary badge-pill">{{ item.book_rating }}</span>
+      <span class="text-info">Publication Date: </span><span>{{ book.publication_date }}</span>
       <br>
-      <!--{% if item.book_rating is null %}
-      <span class="text-secondary">Provide a rating and write the first review for this book.</span>
+      {% if book.sample %}<a href="{{ book.sample.url }}">Sample</a>{% endif %}
       <br>
-      {% endif %}-->
-      {% endfor %}
+      {% if not reviews %}
+        {% if user.is_authenticated %}
+        <h3><em>Be the first to write a review</em></h3>
+        {% endif %}
+      {% else %}
   </li>
 </ul>
-
+<h3>Review comments</h3>
 <ul class="list-group">
-  {% for item in review_list %}
+  
+  {% for review in reviews %}
   <li class="list-group-item">
-      <span class="text-info">Review comment: </span> <span>{{ item.review.content }}</span>
+      <span class="text-info">Review comment: </span> <span>{{ review.content }}</span>
       <br>
-      <span class="text-info">Created on: </span><span>{{ item.review.date_created }}</span>
+      <span class="text-info">Created on: </span><span>{{ review.date_created }}</span>
       <br>
-      <span class="text-info">Modified on: </span><span>{{ item.review.date_edited }}</span>
+      <span class="text-info">Modified on: </span><span>{{ review.date_edited }}</span>
       <br>
-      <span class="text-info">Rating: </span><span class="badge badge-primary badge-pill">{{ item.review.rating }}</span>
+      <span class="text-info">Rating: </span><span class="badge badge-primary badge-pill">{{ review.rating }}</span>
       <br>
-      <span class="text-info">Creator: </span><span>{{ item.review.creator.email }}</span>
+      <span class="text-info">Creator: </span><span>{{ review.creator.email }}</span>
       <br>
+      {% if user.is_staff or review.creator.id == user.id %}
+      <a href="{% url 'review_edit' book.pk review.pk %}">Edit Review</a>
+      {% endif %}
   </li>
   {% endfor %}
 </ul>
+{% endif %}
+{% if user.is_authenticated %}
+<a href="{% url 'review_create' book.pk %}" class="btn btn-primary">Add Review</a>
+<a href="{% url 'book_media' book.pk %}" class="btn btn-primary">Media</a>
+{% endif %}
 {% endblock %}

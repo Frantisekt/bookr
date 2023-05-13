@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+{% extends 'reviews/base.html' %}
 
 {% block content %}
 <ul class="list-group">
@@ -21,5 +21,6 @@
       <a class="btn btn-primary btn-sm active" role="button" aria-pressed="true" href="/books/{{ item.book.pk }}/">Reviews</a></li>
   </li>
   {% endfor %}
+
 </ul>
 {% endblock %}

@@ -1,6 +1,60 @@
-from django.shortcuts import render, get_object_or_404
-from .models import Book, Review
+from django.shortcuts import render, get_object_or_404, redirect
+from .models import Book, Review, Contributor, Publisher
 from .utils import average_rating
+from .forms import SearchForm, PublisherForm, ReviewForm
+from django.contrib import messages
+from django.utils import timezone
+from .forms import BookMediaForm
+
+from io import BytesIO
+from django.core.exceptions import PermissionDenied
+from PIL import Image
+from django.core.files.images import ImageFile
+from django.contrib.auth.decorators import login_required, user_passes_test
+
+from django.contrib.sessions.backends.db import SessionStore
+from django.contrib.sessions.models import Session
+
+def index(request):
+    return render(request, "base.html")
+
+
+def book_search(request):
+    search_text = request.GET.get("search", "")
+    search_history = request.session.get('search_history', [])
+    form = SearchForm(request.GET)
+    books = set()
+    if form.is_valid() and form.cleaned_data["search"]:
+        search = form.cleaned_data["search"]
+        search_in = form.cleaned_data.get("search_in") or "title"
+        
+        if search_in == "title":
+            books = Book.objects.filter(title__icontains=search)
+
+        else:
+            fname_contributors = Contributor.objects.filter(first_names__icontains=search)
+                
+                
+            for contributor in fname_contributors:
+                for book in contributor.book_set.all():
+                    books.add(book)
+
+            lname_contributors = Contributor.objects.filter(last_names__icontains=search)
+
+            for contributor in lname_contributors:
+                for book in contributor.book_set.all():
+                    books.add(book)
+
+        if request.user.is_authenticated:
+            search_history.append([search_in, search])
+            request.session['search_history'] = search_history
+
+    elif search_history:
+        initial = dict(search=search_text, search_in=search_history[-1][0])
+        form = SearchForm(initial=initial)
+                    
+    return render(request, "reviews/search-results.html", {"form": form, "search_text": search_text, "books": books})
+
 
 def book_list(request):
     "This code retrieves an set of the books inside our database based on their reviews."
@@ -19,27 +73,103 @@ def book_list(request):
     return render(request, 'reviews/books_list.html', context)
 
 
-def book_details(request, pk):  
-    "This code lists the book's details associated to each book."
+def book_details(request, pk):
     book = get_object_or_404(Book, pk=pk)
-    reviews =  Review.objects.filter(book__pk=pk)
- 
-    book_rating = average_rating([review.rating for review in reviews])
+    reviews = book.review_set.all()
 
-    book_details = []
-    review_list = []
-    
-    for review in reviews:
-        review_list.append({'review': review,})
-        
-    book_details.append({'book': book, 'book_rating': book_rating})
-    context = {'book_details': book_details, 'review_list': review_list}
-    print(context)
+    if reviews:
+        book_rating = average_rating([review.rating for review in reviews])
+        context = {"book": book, "book_rating": book_rating, "reviews": reviews}
+    else:
+        context = {"book": book, "book_rating": None, "reviews": reviews}
+
+
+    if request.user.is_authenticated:
+        max_viewed_books_length = 10
+        viewed_books = request.session.get('viewed_books', [])
+        viewed_book = [book.id, book.title]
+        if viewed_book in viewed_books:
+            viewed_books.pop(viewed_books.index(viewed_book))
+        viewed_books.insert(0, viewed_book)
+        viewed_books = viewed_books[:max_viewed_books_length]
+        request.session['viewed_books'] = viewed_books
     return render(request, 'reviews/book_details.html', context)
 
 
 
+def is_staff_user(user):
+    return user.is_staff
+    
+@user_passes_test(is_staff_user)
+def publisher_edit(request, pk=None):
+    if pk is not None:
+        publisher = get_object_or_404(Publisher, pk=pk)
+    else:
+        publisher = None
+
+    if request.method == "POST":
+        form = PublisherForm(request.POST, instance=publisher)
+        if form.is_valid():
+            updated_publisher = form.save()
+            if publisher is None:
+                messages.success(request, f"Publisher {updated_publisher} was created.")
+    else:
+        form = PublisherForm(instance=publisher)
+    return render(request, "reviews/instance-form.html", {"form": form, "instance": publisher, "model_type": "Publisher"})
 
 
+@login_required
+def review_edit(request, book_pk, review_pk=None):
+    book = get_object_or_404(Book, pk=book_pk)
+    if review_pk is not None:
+        review = get_object_or_404(Review, book_id=book_pk, pk=review_pk)
+
+        user = request.user   # Logic to the view that requires that the user be either a staff user or the owner of the review.
+        if not user.is_staff and review.creator.id != user.id:
+            raise PermissionDenied    
+    else:
+        review = None
+
+    if request.method == "POST":
+        form = ReviewForm(request.POST, instance=review)
+        if form.is_valid():
+            updated_review = form.save(commit=False)
+            updated_review.book = book
+
+        if review_pk is None:
+            messages.success(request, f"Review for {book.title} was created.")
+        else:
+            updated_review.date_edited = timezone.now()
+            messages.success(request, f"Review for {book.title} was updated.")
+            updated_review.save()
+        return redirect('book_details', book.pk)
+            
+    else:
+        form = ReviewForm(instance=review)
+
+    return render(request, "reviews/instance-form.html", {"form": form, "instance": review, "model_type": "Review", "related_model_type": "Book", "related_instance": book})
 
 
+@login_required
+def book_media(request, pk):
+    book = get_object_or_404(Book, pk=pk)
+    if request.method == "POST":
+        form = BookMediaForm(request.POST, request.FILES, instance=book)
+        if form.is_valid():
+            book = form.save(commit=False)
+            cover = form.cleaned_data.get("cover")
+            if cover:
+                image = Image.open(cover)
+                image.thumbnail((300, 300))
+                image_data = BytesIO()
+                image.save(fp=image_data, format=cover.image.format)
+                image_file = ImageFile(image_data)
+                book.cover.save(cover.name, image_file)
+            book.save()
+            messages.success(request, f"{book.title} has been updated.")
+            return redirect('book_details', book.pk)
+        
+    else:
+        form = BookMediaForm(instance=book)
+    
+    return render(request, "reviews/instance-form.html", {"form": form, "instance": book, "model_type": "Book", "is_file_upload": True})

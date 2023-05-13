@@ -16,6 +16,7 @@ class BookAdmin(admin.ModelAdmin):
     list_filter = ('publisher', 'publication_date')
     search_fields = ('title', 'isbn', 'publisher__name__startswith')
 
+    
 # The following code is commented as it performs the same action as the method on the Contributor model.
 #    def isbn13(self, obj):
 #        """ '9780316769174' => '978-0-31-676917-4' """
@@ -37,3 +38,4 @@ class ReviewAdmin(admin.ModelAdmin):
     exclude = ('date_edited',)
     # field = ('content', 'rating', 'creator', 'book')
     fieldsets = (None, {'fields': ('creator', 'book')}), ('Review content', {'fields': ('content', 'rating')})
+

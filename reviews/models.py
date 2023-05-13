@@ -18,6 +18,9 @@ class Book(models.Model):
     isbn = models.CharField(max_length=20, verbose_name="ISBN umber of the book.")
     publisher = models.ForeignKey(Publisher, on_delete=models.CASCADE)
     contributors = models.ManyToManyField('Contributor', through="BookContributor")
+    cover = models.ImageField(upload_to="book_covers/", null=True, blank=True)
+    sample = models.FileField(upload_to="book_samples/", null=True, blank=True)
+
 
     def isbn13(self):
         """ '9780316769174' => '978-0-31-67697-4' """
@@ -39,6 +42,11 @@ class Contributor(models.Model):
         initials = ''.join([name[0] for name in self.first_names.split (' ')])
         return f'{self.last_names}, {initials}'
 
+
+    def number_contributions(self):
+        return self.bookcontributor_set.count()
+
+
     def __str__(self):
         return self.first_names
 
@@ -48,12 +56,12 @@ class BookContributor(models.Model):
         AUTHOR = "AUTHOR", "Author"
         CO_AUTHOR = "CO_AUTHOR", "Co-Author"
         EDITOR = "EDITOR", "Editor"
+        
 
     book = models.ForeignKey(Book, on_delete=models.CASCADE)
     contributor = models.ForeignKey(Contributor, on_delete=models.CASCADE)
     role = models.CharField(verbose_name="The role this contributor had in the book.", choices=ContributionRole.choices, max_length=20)
-
-
+    
 class Review(models.Model):
     content = models.TextField(help_text="The Review text.")
     rating = models.IntegerField(help_text="The rating the reviewer has given.")
@@ -62,4 +70,5 @@ class Review(models.Model):
     creator = models.ForeignKey(auth.get_user_model(), on_delete=models.CASCADE)
     book = models.ForeignKey(Book, on_delete=models.CASCADE, help_text="The Book that this review is for.")
 
-
+    def __str__(self):
+        return f"{self.creator.username}, {self.book.title}"
